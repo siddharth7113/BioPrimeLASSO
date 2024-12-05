@@ -171,7 +171,7 @@ chronos &lt;- read.csv(&quot;./chronos.tsv&quot;,sep = '\t',header=T)
 gene_info &lt;- biomaRt::getBM(
   attributes = c(&quot;chromosome_name&quot;, &quot;start_position&quot;, &quot;hgnc_symbol&quot;),
   filters = &quot;hgnc_symbol&quot;,
-  values = colnames(cnv),
+  values = colnames(rna),
   mart = mart)
 
 chrs &lt;- as.character(1:22)
