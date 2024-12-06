@@ -288,7 +288,7 @@ g_fig4c &lt;- lapply(figCbiomarker,function(x){
     x_cells &lt;- intersect(names(d2_DMAP1),names(x_cnv))
     d2_DMAP1 &lt;- d2_DMAP1[x_cells]
     x_cnv &lt;-  x_cnv[x_cells]
-    p_cnv &lt;- ggplot(data.frame(d2=d2_DMAP1,x=x_cnv),aes(x=x,y=d2))+geom_point()+
+    p_cnv &lt;- ggplot(data.frame(d2=d2_DMAP1,x=x_cnv),aes(x=x,y=d2))+
       geom_smooth(method = &quot;lm&quot;,se=F) +
       geom_point(alpha=0.75) +
       ggpubr::stat_cor(label.sep='\n',method='spearman') +
@@ -297,7 +297,7 @@ g_fig4c &lt;- lapply(figCbiomarker,function(x){
     # D2
     d2_x &lt;- demeter2[,x]
     d2_DMAP1&lt;- demeter2[,GoI]
-    p_dep &lt;- ggplot(data.frame(d2=d2_DMAP1,x=d2_x),aes(x=x,y=d2))+geom_point()+
+    p_dep &lt;- ggplot(data.frame(d2=d2_DMAP1,x=d2_x),aes(x=x,y=d2))+
       geom_smooth(method = &quot;lm&quot;,se=F) +
       geom_point(alpha=0.75) +
       ggpubr::stat_cor(label.sep='\n') +
