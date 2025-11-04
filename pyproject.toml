@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "bioprimelasso"
+version = "0.1.0"
+description = "Python port of the BioPrime LASSO modeling utilities"
+requires-python = ">=3.9"
+authors = [
+  {name = "BioPrimeLASSO Maintainers"}
+]
+dependencies = [
+  "numpy",
+  "pandas",
+  "scikit-learn",
+  "matplotlib",
+  "seaborn"
+]
+
+[project.urls]
+Homepage = "https://github.com/dmhenke/BioPrimeLASSO"
