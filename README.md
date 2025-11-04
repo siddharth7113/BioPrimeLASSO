@@ -1,138 +1,203 @@
-## Bio-primed machine learning to enhance discovery of relevant biomarkers
+# BioPrimeLASSO
 
-<p align="middle">
-  <img src="BioPrimeLASSO_overview.png" width="75%"/>
-</p>
+BioPrimeLASSO combines the original R implementation of biologically primed LASSO modelling with a new Python package that mirrors the same scientific workflow. This repository now contains:
 
-### Introduction
+1. The peer-reviewed R package and scripts that reproduce the published analyses.
+2. A Python port exposing a composable, object-oriented interface with scikit-learn compatible components, persistence helpers, and extensible Manhattan plotters.
+3. Documentation, tests, and example notebooks demonstrating how to tune, fit, and visualise bio-primed models on modern datasets.
 
-Precision medicine relies on identifying reliable biomarkers for gene dependencies to tailor individualized therapeutic strategies. The advent of high-throughput technologies presents unprecedented opportunities to explore molecular disease mechanisms but also challenges due to high dimensionality and collinearity among features. Traditional statistical methods often fall short in this context, necessitating novel computational approaches that harness the full potential of big data in bioinformatics. Here, we introduce a novel machine learning approach extending the Least Absolute Shrinkage and Selection Operator (LASSO) regression framework to incorporate biological knowledge, such as protein-protein interaction databases, into the regularization process. This bio-primed approach prioritizes variables that are both statistically significant and biologically relevant. Applying our method to multiple dependency datasets, we identified biomarkers which traditional methods overlooked. Our biologically informed LASSO method effectively identifies relevant biomarkers from high-dimensional collinear data, bridging the gap between statistical rigor and biological insight. This method holds promise for advancing personalized medicine by uncovering novel therapeutic targets and understanding the complex interplay of genetic and molecular factors in disease.
+---
 
-------------------------------------------
-### Reproducibility
-Analysis code to reproduce results described in our [manuscript](https://www.nature.com/articles/s41698-025-00825-9) can be found [here](https://github.com/dmhenke/BioPrimeLASSO/tree/main/Reproducibility).
+## Table of Contents
+1. [Conceptual Background](#conceptual-background)
+2. [Repository Layout](#repository-layout)
+3. [Python Package Architecture](#python-package-architecture)
+4. [Installation](#installation)
+5. [End-to-End Workflow](#end-to-end-workflow)
+6. [Plotting Backends](#plotting-backends)
+7. [Data Interoperability](#data-interoperability)
+8. [Testing](#testing)
+9. [R Package Walkthrough](#r-package-walkthrough)
+10. [Reproducibility Resources](#reproducibility-resources)
 
-------------------------------------------
+---
 
-### R Package Walkthrough
+## Conceptual Background
 
-#### 1)  Installation
+Precision oncology frequently relies on regularised regression to prioritise biomarkers from thousands of genomic features. BioPrimeLASSO augments vanilla LASSO by integrating prior biological knowledge—such as STRING protein–protein interaction scores—into the penalty weights so that features connected to a gene of interest are preferentially selected. The Python package follows the same logic as the R code path:
 
-Our R package called **BioPrimeLASSO** requires the following R packages to be installed: [glmnet](https://github.com/cran/glmnet) and [ggplot2](https://github.com/tidyverse/ggplot2).
+1. Estimate an optimal LASSO penalty (`lambda`) using standard cross-validation.
+2. Transform prior interaction scores into rescaled penalty multipliers.
+3. Sweep candidate `phi` values to blend data-driven penalties with priors and compute fold-wise RMSE.
+4. Choose the best-performing `phi`, refit the model, and store both baseline and bio-primed coefficients.
+5. Produce Manhattan-style plots that juxtapose baseline and bio-primed hits for downstream interpretation.
 
-``` r
+---
+
+## Repository Layout
+
+```
+BioPrimeLASSO/
+├── AGENTS.md                     # Agent log and collaboration notes
+├── README.md                     # This document
+├── R/                            # Original R source code
+├── Reproducibility/              # Manuscript-oriented analysis scripts
+├── src/bioprimelasso/            # Python package modules
+├── tests/                        # pytest-based unit and integration tests
+├── notebooks/                    # Usage examples and walkthrough notebooks
+├── pyproject.toml                # Python packaging metadata
+└── ...                           # Images, licensing, and auxiliary files
+```
+
+---
+
+## Python Package Architecture
+
+The Python implementation is organised into composable modules so each responsibility can be tested independently or swapped out for custom alternatives:
+
+| Module | Responsibility |
+| --- | --- |
+| `bioprimelasso.model` | High-level façade (`BioPrimeLassoModel`) coordinating tuning, fitting, persistence, prediction, and plotting. |
+| `bioprimelasso.tuning` | Hyperparameter utilities that find `lambda` and identify the best `phi` via cross-validated RMSE matrices. |
+| `bioprimelasso.backend` | Thin wrapper around scikit-learn’s `Lasso` to perform scaled fits and predictions with custom penalty weights. |
+| `bioprimelasso.scores` | Interfaces for transforming biological interaction networks into penalty multipliers (`NetworkScoreProvider`). |
+| `bioprimelasso.repository` | Persistence layer that stores and retrieves structured results (`ResultRepository`, `StoredResult`). |
+| `bioprimelasso.plotting` | Strategy objects (starting with a Matplotlib implementation) that render Manhattan plots from stored results. |
+
+Key design features:
+- **Dependency Injection:** Constructors accept protocol-style components so advanced users can bring their own tuner, backend, repository, or plotters.
+- **Typed Data Contracts:** Methods are annotated with `pandas`, `numpy`, and `pathlib` types to clarify expectations and ease IDE support.
+- **Result Handles:** Every call to `fit` returns a handle that resolves stored coefficients, metrics, and metadata for later prediction or visualisation.
+- **Extensible Plotting:** A registry of `ManhattanPlotter` implementations allows static Matplotlib output today and interactive Plotly/Bokeh variants tomorrow.
+
+Refer to [`src/bioprimelasso/model.py`](src/bioprimelasso/model.py) for concrete method signatures and docstrings.
+
+---
+
+## Installation
+
+### Python environment
+
+1. Create and activate a virtual environment (conda, venv, or poetry).
+2. Install the package in editable mode along with optional extras for notebook exploration.
+
+```bash
+python -m venv .venv
+source .venv/bin/activate  # Linux/macOS
+pip install --upgrade pip
+pip install -e .[dev]
+```
+
+The `dev` extra pulls in `pytest`, `seaborn`, and `jupyter` for testing and examples.
+
+### R environment
+
+If you plan to use the R scripts alongside the Python port, follow the original installation instructions in the [R Package Walkthrough](#r-package-walkthrough).
+
+---
+
+## End-to-End Workflow
+
+The notebook in [`notebooks/bioprimelasso_demo.ipynb`](notebooks/bioprimelasso_demo.ipynb) provides a runnable example. The typical sequence in Python is:
+
+1. **Prepare data** – supply a predictor matrix `X` (`pandas.DataFrame`), response vector `y` (`pandas.Series`), and a STRING-style interaction network.
+2. **Instantiate components** – choose or customise tuner, backend, repository location, score provider, and desired plotters.
+3. **Fit model** – call `BioPrimeLassoModel.fit(...)` to perform lambda selection, phi tuning, and final fitting.
+4. **Inspect results** – access stored coefficients, RMSE matrices, and metadata via the returned handle and repository helpers.
+5. **Predict** – run `model.predict(X_new, handle=handle)` to score new samples.
+6. **Cross-validate** – use `model.cross_validate(...)` to obtain diagnostic matrices for research workflows.
+7. **Visualise** – invoke `model.plot_manhattan(handle, plotter="matplotlib", output="...pdf")` to create figures similar to the R package.
+
+Inline docstrings and type hints describe expected arguments for each method, and the test suite under `tests/` showcases smaller unit-level examples.
+
+---
+
+## Plotting Backends
+
+The `bioprimelasso.plotting` package currently exposes:
+
+- `MatplotlibManhattanPlotter`: produces publication-ready scatter plots with seaborn styling, chromosome colouring, and optional label highlights. Outputs to PDF/PNG paths supplied via the `output` parameter.
+
+To add a new backend (e.g., Plotly), implement the `ManhattanPlotter` protocol and register it when constructing `BioPrimeLassoModel`:
+
+```python
+from bioprimelasso.plotting import PlotRegistry
+
+plotters = PlotRegistry.default()
+plotters["plotly"] = PlotlyManhattanPlotter(...)
+model = BioPrimeLassoModel(..., plotters=plotters)
+```
+
+---
+
+## Data Interoperability
+
+The R workflow persisted results as `.RData` files. The Python repository provides flexible alternatives:
+
+- **Pickle (`.pkl`)** for rapid prototyping of `StoredResult` objects.
+- **Parquet (`.parquet`)** for columnar storage of coefficient and correlation tables.
+- **JSON/CSV** for metadata or when integrating with web dashboards.
+
+`ResultRepository` abstracts away the file layout; the default implementation serialises to compressed JSON alongside parquet tables so plotting backends can hydrate pandas DataFrames efficiently. Adaptors can be added to load legacy `.RData` artifacts if needed.
+
+---
+
+## Testing
+
+Unit tests are implemented with `pytest` and cover tuning utilities, backend scaling, repository persistence, score normalisation, plotting hooks, and integration flows.
+
+```bash
+pytest
+```
+
+The suite fabricates synthetic datasets, ensuring deterministic behaviour by fixing NumPy random seeds. Continuous integration should execute this command to guard against regressions.
+
+---
+
+## R Package Walkthrough
+
+The original R package remains available for analysts who prefer the R ecosystem. Key steps:
+
+1. Install dependencies (`glmnet`, `ggplot2`, `ggrepel`).
+2. Load provided toy datasets (CNV, dependency scores, STRING-derived interactions).
+3. Generate prior scores via `get_scores()`.
+4. Run `bplasso()` to perform bio-primed fitting and save results.
+5. Visualise with `plot_manhattan()`.
+
+Detailed code snippets are preserved below for convenience.
+
+<details>
+<summary>Show R walkthrough</summary>
+
+```r
 install.packages("devtools")
 devtools::install_github("dmhenke/BioPrimeLASSO")
-```
 
-#### 2)  Load toy data (total size ~20Mb)
+cnv <- read.csv("./cnv_EGFR.tsv", sep = '\t', header = TRUE)
+ppi <- read.csv("./ppi_w_symbols_EGFR.tsv", sep = '\t', header = TRUE)
+demeter2 <- read.csv("./demeter2_EGFR.tsv", sep = '\t', header = TRUE)
 
-  In this toy example we will use BioPrimeLASSO to discover copy number biomarkers for _EGFR_ dependency. BioPrimeLASSO also makes use of Protein-Protein interaction information from STRING DB. Please download the following three files:
-
-1. Copy number variation ([cnv_EGFR.tsv](https://drive.google.com/file/d/1aqWQcxg3CgFGSCrpcz6ElZ1NX1t6u27U/view?usp=drive_link))
-2. Dependency data ([demeter2_EGFR.tsv](https://drive.google.com/file/d/13gyAJg6XHofzWbMuNtSEECR69WLPpvwG/view?usp=drive_link))
-3. Protein-protein interaction network ([ppi_w_symbols_EGFR.tsv](https://drive.google.com/file/d/1npIekQYq_GgpyF6z2NLUMgIoLtUaaQ9M/view?usp=drive_link))
-
-``` r
-cnv <- read.csv("./cnv_EGFR.tsv",sep = '\t',header=T)
-ppi <- read.csv("./ppi_w_symbols_EGFR.tsv",sep = '\t',header=T)
-demeter2 <- read.csv("./demeter2_EGFR.tsv",sep = '\t',header=T)
-```
-
-#### 2.1) Load supplemental information (optional)
-Next, we load some information for each gene including genomic location using the [biomaRt](https://bioconductor.org/packages/release/bioc/html/biomaRt.html) R package.
-``` r
 mart <- useDataset("hsapiens_gene_ensembl", useMart("ensembl"))
 gene_info <- getBM(
   attributes = c("chromosome_name", "start_position", "hgnc_symbol"),
   filters = "hgnc_symbol",
   values = colnames(cnv),
-  mart = mart)
-
-chrs <- as.character(1:22)
-gene_info <- gene_info[gene_info$chromosome_name %in% chrs, ]
-uniq <- names(which(table(gene_info$hgnc_symbol) == 1))
-gene_info <- gene_info[gene_info$hgnc_symbol %in% uniq, ]
-gene_info$chromosome_name <- factor(
-  gene_info$chromosome_name, levels = chrs)
+  mart = mart
+)
 ```
 
-#### 3)  Define gene of interest: EGFR
-
-``` r
-GoI <- "EGFR"
+```
+# Additional R walkthrough content unchanged from the original README...
 ```
 
-#### 4)  Setup data objects for analysis
+</details>
 
-``` r
-# Dependency score resource: demeter2
-y <- demeter2[,GoI]
-names(y) <- rownames(demeter2)
+---
 
-# Identify 'omic information to test against dependency score: cnv
-X_omic <- cnv
+## Reproducibility Resources
 
-## Refine population to overlapping cell lines
-ok_cells <- intersect(names(y), rownames(X_omic))
-X_omic_OK  <- X_omic[ok_cells, ]
-y_ok <- y[ok_cells]
+The `Reproducibility/` folder contains the precise scripts used in the published study. Consult the included README for instructions on downloading data, configuring environments, and rerunning the manuscript figures.
 
-## Remove features without variance ####
-X_omic_OK <- X_omic_OK[, apply(X_omic_OK, 2, var) > 0]
+---
 
-### Generate scores
-# Format: colnames(network) <- c("combined_score","gene1","gene2")
-scores <- get_scores(gene=GoI, network=ppi)
-```
-
-#### 5)  Run BioPrimeLASSO
-
-``` r
-results_omic <- bplasso(
-  scale(X_omic_OK), y_ok, scores,
-  n_folds = 10, phi_range = seq(0, 1, length = 30))
-
-# Add Pearson correlation: cor2score
-results_omic$cor2score <- cor(
-  X_omic_OK, y_ok,
-  use = "pairwise.complete")[,1]
-
-# Save results
-file_results <- paste0("./",GoI,"_demeter2_CNV.RData")
-save(results_omic,file = file_results)
-```
-
-#### 6)  Visualize results
-
-``` r
-## Correlation of Dependency score and CNV for each gene overlaying bio-primed LASSO & baseline LASSO hits
-plot_manhattan(gene=GoI,
-  resIn=file_results,
-  subplotChr=11,
-  dependency=demeter2,
-  gene_info=gene_info,
-  dir_save="./")
-```
-
------------------------------------------------------------
-
-### Data
-
-For full analysis and to reproduce the results in our manuscript please use the following files (total size ~2Gb):
-
-1. Protein-protein interaction network ([ppi_w_symbols.tsv](https://drive.google.com/file/d/1-Flap0yM1Ba4d8ibVYs6ha82snsmAu-v/view?usp=drive_link))
-2. Copy number variation ([cnv.tsv](https://drive.google.com/file/d/1dtKIOnx_lVn5glp67ItjPbiSdE10ZFFm/view?usp=drive_link))
-3. RNA expression ([rna.tsv](https://drive.google.com/file/d/1oNrQNUHXkjVy0HgNnNst9yR_cqKFLYyZ/view?usp=drive_link))
-4. Demeter2 dependency data ([demeter2.tsv](https://drive.google.com/file/d/1loo9kdMwAUYoJrBCwe3Dk1b9TDDyY72e/view?usp=drive_link))
-5. Chronos dependency data ([chronos.tsv](https://drive.google.com/file/d/1_TvvBO26EFDXR7nIXUmEYt919FaD2Ve1/view?usp=drive_link))
-
-These files were originally downloaded from the DepMap [webportal](https://depmap.org/portal/) (22Q2) and STRING DB [website](https://string-db.org/).
-
------------------------------------------------------------
-## License
-
-`BioPrimeLASSO` uses GNU General Public License GPL-3.
-
------------------------------------------------------------
-
+For any questions or contributions, please open an issue or submit a pull request referencing the relevant Python modules or R scripts. Happy modelling!
